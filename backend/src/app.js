@@ -1,5 +1,8 @@
 import express from "express";
 import cors from "cors";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
 import authRoutes from "./modules/auth/auth.routes.js";
 import usersRoutes from "./modules/users/users.routes.js";
 import communityRoutes from "./modules/community/community.routes.js";
@@ -12,6 +15,9 @@ import analyticsRoutes from "./modules/analytics/analytics.routes.js";
 import achievementsRoutes from "./modules/achievements/achievements.routes.js";
 import profileRoutes from "./modules/profile/profile.routes.js";
 import { errorHandler } from "./middleware/errorHandler.js";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const publicDir = path.join(__dirname, "../public");
 
 export function createApp() {
   const app = express();
@@ -37,7 +43,18 @@ export function createApp() {
   app.use("/api/achievements", achievementsRoutes);
   app.use("/api/profile", profileRoutes);
 
-  app.use((req, res) => res.status(404).json({ error: "Not found" }));
+  app.use("/api", (req, res) => res.status(404).json({ error: "Not found" }));
+
+  // Serve the built frontend (present in the Docker image; absent in local
+  // `npm run dev`, where Vite serves it separately) and fall back to
+  // index.html for client-side routes.
+  if (fs.existsSync(publicDir)) {
+    app.use(express.static(publicDir));
+    app.get(/^(?!\/api).*/, (req, res) => {
+      res.sendFile(path.join(publicDir, "index.html"));
+    });
+  }
+
   app.use(errorHandler);
 
   return app;
