@@ -12,6 +12,7 @@ dist-ssr
 frontend/.env
 backend/.env
 */.env
+.env
 # Logs
 logs
 *.log
@@ -35,3 +36,6 @@ lerna-debug.log*
 # OS junk
 .DS_Store
 Thumbs.db
+docker-compose.override.yml
+dcoker-bake.hcl
+Dockerfile

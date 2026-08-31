@@ -4,7 +4,7 @@
 ### click it to fire that request. Run them roughly top to bottom the first
 ### time; @authToken and @adminToken auto-fill from earlier responses.
 
-@baseUrl = http://localhost:4000
+@baseUrl = https://makerspace.idri.edu.kh
 
 ### 1. Health check — server is up
 GET {{baseUrl}}/api/health
