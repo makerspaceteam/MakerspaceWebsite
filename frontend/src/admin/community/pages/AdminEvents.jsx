@@ -448,11 +448,12 @@ export default function AdminEvents() {
         </div>
       )}
 
-      {/* Add / Edit form — wide two-column layout, admin panel is desktop-only
+      {/* Add / Edit form — wide three-column layout, admin panel is desktop-only
           in practice, so there's no need to cram everything into one narrow
-          stacked column like a mobile form would. */}
+          stacked column like a mobile form would. Description gets its own
+          column since event write-ups tend to run long. */}
       <Dialog open={formOpen} onOpenChange={setFormOpen}>
-        <DialogContent className="max-w-4xl max-h-[88vh] overflow-y-auto">
+        <DialogContent className="max-w-6xl max-h-[88vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{editingId ? "Edit event" : "Add event"}</DialogTitle>
             <DialogDescription>
@@ -465,8 +466,8 @@ export default function AdminEvents() {
               <div className="rounded-lg bg-red-50 text-red-600 text-sm px-4 py-2.5">{error}</div>
             )}
 
-            <div className="grid gap-5 lg:grid-cols-2 lg:gap-x-8">
-              {/* Left column — the essentials */}
+            <div className="grid gap-5 lg:grid-cols-3 lg:gap-x-8">
+              {/* Column 1 — the essentials */}
               <div className="grid gap-4 content-start">
                 <div>
                   <label className={labelCls}>Title</label>
@@ -493,14 +494,9 @@ export default function AdminEvents() {
                   <label className={labelCls}>Capacity <span className="font-normal text-muted-foreground">(optional)</span></label>
                   <input type="number" min="0" className={inputCls} value={form.capacity} onChange={updateField("capacity")} />
                 </div>
-
-                <div>
-                  <label className={labelCls}>Description</label>
-                  <textarea className={inputCls} rows={6} value={form.description} onChange={updateField("description")} />
-                </div>
               </div>
 
-              {/* Right column — media and outbound links */}
+              {/* Column 2 — media and outbound links */}
               <div className="grid gap-4 content-start">
                 <ImageListEditor
                   images={form.images}
@@ -537,6 +533,19 @@ export default function AdminEvents() {
                     Shown as a "View event gallery" button once the event ends. Leave blank until photos are ready — attendees see "coming soon" until then.
                   </p>
                 </div>
+              </div>
+
+              {/* Column 3 — description, given its own column since these run long */}
+              <div className="flex flex-col gap-1.5">
+                <label className={labelCls}>Description</label>
+                <textarea
+                  className={`${inputCls} min-h-[22rem] flex-1 resize-none font-mono text-[13px] leading-relaxed`}
+                  value={form.description}
+                  onChange={updateField("description")}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Supports Markdown: <code className="rounded bg-muted px-1 py-0.5"># Heading</code>, <code className="rounded bg-muted px-1 py-0.5">**bold**</code>, <code className="rounded bg-muted px-1 py-0.5">- list item</code>. New lines become line breaks automatically.
+                </p>
               </div>
             </div>
 

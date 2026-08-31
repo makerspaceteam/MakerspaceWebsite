@@ -7,6 +7,7 @@ import {
 } from "@/lib/events-data";
 import { useAuth } from "@/hub/AuthContext";
 import { Button } from "@/components/community/ui/button";
+import MarkdownText from "@/components/community/MarkdownText";
 
 export default function EventDetailPage() {
   const { eventId } = useParams();
@@ -253,9 +254,9 @@ export default function EventDetailPage() {
                 <p className="text-xs text-muted-foreground">{event.author.role}</p>
               </div>
             </div>
-            <div className="prose prose-neutral mt-8 max-w-none">
+            <div className="mt-8 max-w-none">
               <h2 className="text-xl font-semibold">About this event</h2>
-              <p className="mt-3 text-base leading-relaxed text-foreground/90">{event.description}</p>
+              <MarkdownText text={event.description} />
             </div>
           </article>
           <aside className="lg:sticky lg:top-24 h-fit">
