@@ -7,8 +7,8 @@ RUN npm ci
 COPY frontend/ ./
 # Same-origin: Express serves both API and static files, so the browser
 # never needs an absolute API URL.
-ARG BACKEND_URL=""
-ENV BACKEND_URL=$BACKEND_URL
+ARG VITE_BACKEND_URL
+ENV VITE_BACKEND_URL=$VITE_BACKEND_URL
 RUN npm run build
 
 FROM node:22-alpine

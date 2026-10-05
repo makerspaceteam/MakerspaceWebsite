@@ -1,9 +1,13 @@
 variable "IMAGE" {
-  default = "makerspacecadt/maker_web_cadt"
+  default = "registry.idri.edu.kh/makerspacecadt/maker_web_cadt"
 }
 
 variable "TAG" {
   default = "latest"
+}
+
+variable "VITE_BACKEND_URL" {
+  default = ""
 }
 
 group "default" {
@@ -12,6 +16,10 @@ group "default" {
 
 target "app" {
   context   = "."
-  platforms = ["linux/amd64", "linux/arm64"]
+  platforms = ["linux/amd64"]
   tags      = ["${IMAGE}:${TAG}"]
+  args = {
+    VITE_BACKEND_URL = "${VITE_BACKEND_URL}"
+  }
 }
+
