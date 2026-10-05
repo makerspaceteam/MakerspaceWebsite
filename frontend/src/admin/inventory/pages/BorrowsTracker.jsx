@@ -282,7 +282,7 @@ export default function BorrowsTracker({ borrows, items, users = [], showToast, 
         .bt-chip { padding:7px 14px; border-radius:20px; font-size:12px; font-weight:700; border:1px solid ${T.border}; background:#fff; color:${T.muted}; cursor:pointer; transition:all .15s; white-space:nowrap; }
         .bt-chip.active { background:${T.charcoal}; color:#fff; border-color:transparent; }
         .bt-chip-scroll { display:flex; gap:8px; overflow-x:auto; padding-bottom:4px; }
-        .bt-items-pill { display:inline-flex; align-items:center; gap:5px; font-size:11.5px; font-weight:700; color:var(--color-inv-accent); background:color-mix(in oklch, var(--color-inv-accent) 8%, transparent); padding:4px 10px; border-radius:20px; }
+        .bt-items-pill { display:inline-flex; align-items:center; gap:5px; font-size:11.5px; font-weight:700; color:var(--color-inv-accent); background:color-mix(in oklch, var(--color-inv-accent) 8%, transparent); padding:4px 10px; border-radius:20px; white-space:nowrap; }
         .bt-grid { grid-template-columns: 24px 1.15fr 0.8fr 0.8fr 0.8fr 0.85fr 1fr 1.25fr; }
         .bt-truncate { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
         .bt-cond-chip { display:inline-flex; align-items:center; gap:8px; padding:10px 14px; border-radius:10px; border:1.5px solid ${T.border}; cursor:pointer; font-size:13px; font-weight:600; flex:1; justify-content:center; transition:all .15s; background:#fff; color:${T.charcoal}; }

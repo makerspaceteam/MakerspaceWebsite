@@ -2,7 +2,7 @@ import { useState } from "react";
 import { NavLink, Link, useLocation, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard, Calendar, Users, MessageSquare,
-  UserCog, ArrowLeft, FolderOpen, Folder, ChevronDown,
+  UserCog, ArrowLeft, FolderOpen, Folder, ChevronDown, X,
   Boxes, Printer, RotateCcw, Inbox, CreditCard, Compass, Armchair,
   BookOpen, GraduationCap, LogOut, Award,
 } from "lucide-react";
@@ -104,7 +104,7 @@ function NavItem({ label, to, icon: Icon, end }) {
   );
 }
 
-export function AdminSidebar({ width = 224 }) {
+export function AdminSidebar({ width = 224, mobileOpen = false, onClose }) {
   const { pathname } = useLocation();
   const navigate = useNavigate();
   const { user, logout } = useAuth();
@@ -125,7 +125,7 @@ export function AdminSidebar({ width = 224 }) {
 
   return (
     <aside
-      className="shrink-0 bg-white border-r border-border flex flex-col min-h-screen sticky top-0 h-screen"
+      className={`shrink-0 bg-white border-r border-border flex flex-col min-h-screen max-w-[85vw] fixed inset-y-0 left-0 z-50 transition-transform duration-200 lg:sticky lg:top-0 lg:h-screen lg:z-auto lg:translate-x-0 lg:max-w-none ${mobileOpen ? "translate-x-0" : "-translate-x-full"}`}
       style={{ width }}
     >
       {/* Brand */}
@@ -134,11 +134,17 @@ export function AdminSidebar({ width = 224 }) {
           <p className="text-sm font-bold text-foreground leading-tight">Admin Panel</p>
           <p className="text-[10px] text-muted-foreground font-medium">CADT Makerspace</p>
         </div>
-        {user?.role && (
-          <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full shrink-0 ${ROLE_BADGE[user.role] ?? "bg-muted text-muted-foreground"}`}>
-            {user.role}
-          </span>
-        )}
+        <div className="flex items-center gap-2 shrink-0">
+          {user?.role && (
+            <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${ROLE_BADGE[user.role] ?? "bg-muted text-muted-foreground"}`}>
+              {user.role}
+            </span>
+          )}
+          {/* Close button: drawer mode only (below lg) */}
+          <button onClick={onClose} className="rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground lg:hidden" aria-label="Close menu">
+            <X className="h-4 w-4" />
+          </button>
+        </div>
       </div>
 
       {/* Nav: one folder per module, plus a flat "General" list for

@@ -131,16 +131,18 @@ export default function PaymentsPage({ payments, setPayments, items = [], reques
                       ))}
                     </div>
 
-                    <div className="overflow-hidden rounded-lg border border-stone">
-                      <div className="grid gap-2 bg-cream px-3 py-2 text-xs font-semibold uppercase tracking-wide text-faint" style={{ gridTemplateColumns: '2fr 1.3fr 0.6fr 0.9fr 0.9fr' }}>
-                        <span>Item</span><span>Category</span><span>Qty</span><span>Unit Credit</span><span>Total</span>
-                      </div>
-                      <div className="grid gap-2 px-3 py-2.5 text-xs" style={{ gridTemplateColumns: '2fr 1.3fr 0.6fr 0.9fr 0.9fr' }}>
-                        <span className="truncate font-semibold text-charcoal">{p.itemName || p.type}</span>
-                        <span className="truncate text-inv-muted">{category || '—'}</span>
-                        <span className="text-inv-muted">1</span>
-                        <span className="font-semibold text-charcoal">{currency === '$' ? `${currency}${unit}` : `${unit}${currency}`}</span>
-                        <span className="font-bold text-charcoal">{currency === '$' ? `${currency}${total}` : `${total}${currency}`}</span>
+                    <div className="overflow-x-auto rounded-lg border border-stone">
+                      <div style={{ minWidth: 480 }}>
+                        <div className="grid gap-2 bg-cream px-3 py-2 text-xs font-semibold uppercase tracking-wide text-faint" style={{ gridTemplateColumns: '2fr 1.3fr 0.6fr 0.9fr 0.9fr' }}>
+                          <span>Item</span><span>Category</span><span>Qty</span><span>Unit Credit</span><span>Total</span>
+                        </div>
+                        <div className="grid gap-2 px-3 py-2.5 text-xs" style={{ gridTemplateColumns: '2fr 1.3fr 0.6fr 0.9fr 0.9fr' }}>
+                          <span className="truncate font-semibold text-charcoal">{p.itemName || p.type}</span>
+                          <span className="truncate text-inv-muted">{category || '—'}</span>
+                          <span className="text-inv-muted">1</span>
+                          <span className="font-semibold text-charcoal">{currency === '$' ? `${currency}${unit}` : `${unit}${currency}`}</span>
+                          <span className="font-bold text-charcoal">{currency === '$' ? `${currency}${total}` : `${total}${currency}`}</span>
+                        </div>
                       </div>
                     </div>
 

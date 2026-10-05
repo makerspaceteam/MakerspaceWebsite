@@ -9,12 +9,12 @@ export function StatCard({ label, value, icon: Icon, bg, iconColor, to }) {
       to={to}
       className="group bg-white rounded-xl border border-border p-5 hover:border-border hover:shadow-sm transition-all"
     >
-      <div className="flex items-start justify-between">
-        <div>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">{label}</p>
-          <p className="mt-2 text-3xl font-bold text-foreground">{value}</p>
+          <p className="mt-2 truncate text-2xl font-bold text-foreground" title={String(value)}>{value}</p>
         </div>
-        <div className={`p-2 rounded-lg ${bg}`}>
+        <div className={`shrink-0 p-2 rounded-lg ${bg}`}>
           <Icon className={`h-5 w-5 ${iconColor}`} />
         </div>
       </div>

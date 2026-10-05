@@ -9,6 +9,7 @@ import { T as THEME } from '../../lib/inventory/theme'
 import { CATEGORIES, PRINT_SERVICES, BROWSE_LANDING_IMAGE } from '../../lib/inventory/data'
 import { useAuth } from '../../hub/AuthContext'
 import { useInventory } from '../../lib/inventory/InventoryContext'
+import { Breadcrumb } from '../../components/Breadcrumb'
 
 const NAVY   = 'var(--color-inv-accent-text)' // teal-700 — primary accent (kept name to avoid touching every usage)
 const TEAL   = 'var(--color-inv-accent)'
@@ -102,6 +103,10 @@ export default function HomePage() {
 
             {/* Left */}
             <div>
+              <Breadcrumb className="mb-4" light items={[
+                { label: 'Home', to: '/' },
+                { label: 'Inventory' },
+              ]} />
               <h1 className="font-display leading-[1.1] tracking-tight" style={{ fontSize: 'clamp(30px,5vw,58px)', margin: 0, color: '#fff' }}>
                 Welcome back,<br />
                 <span style={{ color: CYAN }}>{user.name.split(' ')[0]}.</span>

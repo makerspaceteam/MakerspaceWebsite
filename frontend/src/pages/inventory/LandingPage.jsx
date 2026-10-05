@@ -9,6 +9,7 @@ import {
 import { T as THEME } from "../../lib/inventory/theme";
 import { LOGO_IMAGE, BROWSE_LANDING_IMAGE, PRINT_SERVICES, MEMBERSHIP_PLAN, CREDIT_RATE, CREDIT_TIERS } from "../../lib/inventory/data.js";
 import { useInventory } from "../../lib/inventory/InventoryContext";
+import { Breadcrumb } from "../../components/Breadcrumb";
 
 /* ── palette ─────────────────────────────────────────────────────────────── */
 /* Reuses the shared inventory/global tokens instead of its own one-off hex.
@@ -126,6 +127,11 @@ export default function LandingPage() {
   // category, instead of dumping the visitor on the full unfiltered list.
   const browseCategory = (catId) => navigate(`/inventory/browse?category=${catId}`);
 
+  // Real hours: Mon–Fri, 8am–5pm. Computed against the visitor's clock each
+  // render, instead of a hardcoded "open today" label that was true 24/7.
+  const now = new Date();
+  const isOpenNow = now.getDay() >= 1 && now.getDay() <= 5 && now.getHours() >= 8 && now.getHours() < 17;
+
   const liveStats = [
     { value: String(items.length),                                                                    label: "Items",        icon: Package    },
     { value: String(users.filter(u => u.role === "user" && u.membership === "active").length),        label: "Members",      icon: Users      },
@@ -181,6 +187,10 @@ export default function LandingPage() {
         <div className="grid-cols-1 gap-8 px-4 pt-10 lg:grid-cols-[1.1fr_1fr] lg:gap-14 lg:px-12 lg:pt-[72px]" style={{ position: "relative", zIndex: 1, maxWidth: 1320, margin: "0 auto", display: "grid", alignItems: "center" }}>
           {/* Left: headline */}
           <div style={{ paddingBottom: 72 }}>
+            <Breadcrumb className="mb-4" light items={[
+              { label: 'Home', to: '/' },
+              { label: 'Inventory' },
+            ]} />
             <div className="badge" style={{ marginBottom: 24, background: "color-mix(in oklch, var(--color-inv-accent) 15%, transparent)", border: "1px solid color-mix(in oklch, var(--color-inv-accent) 35%, transparent)" }}>
               <Package size={11} style={{ color: "color-mix(in oklch, var(--color-inv-accent) 55%, white)" }} />
               <span style={{ letterSpacing: ".2em", textTransform: "uppercase", color: "color-mix(in oklch, var(--color-inv-accent) 55%, white)" }}>CADT · Makerspace Inventory</span>
@@ -205,8 +215,8 @@ export default function LandingPage() {
             <div style={{ display: "inline-flex", alignItems: "center", gap: 10, padding: "10px 16px", borderRadius: 12, background: "color-mix(in oklch, var(--color-inv-accent) 10%, transparent)", border: "1px solid color-mix(in oklch, var(--color-inv-accent) 25%, transparent)" }}>
               <DoorOpen size={15} style={{ color: "color-mix(in oklch, var(--color-inv-accent) 55%, white)" }} />
               <div>
-                <p style={{ fontSize: 12, fontWeight: 700, color: "#fff" }}>Makerspace is open today</p>
-                <p style={{ fontSize: 11, color: "var(--on-dark-muted)" }}>9:00 AM – 9:00 PM · Room C03</p>
+                <p style={{ fontSize: 12, fontWeight: 700, color: "#fff" }}>{isOpenNow ? "Makerspace is open now" : "Makerspace is closed now"}</p>
+                <p style={{ fontSize: 11, color: "var(--on-dark-muted)" }}>Mon – Fri · 8am – 5pm · Innovation Center - 1st floor, Makerspace Room</p>
               </div>
             </div>
           </div>
