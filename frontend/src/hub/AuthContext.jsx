@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback } from "react";
-import { api, setToken, getToken } from "../lib/api/client";
+import { api, clearLegacyToken, setSessionActive } from "../lib/api/client";
 
 const AuthCtx = createContext(null);
 
@@ -46,13 +46,14 @@ export function AuthProvider({ children }) {
     }
   }, []);
 
-  // On mount, if a token is already stored (from a previous visit), confirm
-  // it's still valid and restore the session; otherwise every page refresh
-  // would silently sign the user out.
+  // On mount, ask the backend whether the HttpOnly session cookie (which JS
+  // can't read) is still valid, and restore the session if so; otherwise
+  // every page refresh would silently sign the user out.
   useEffect(() => {
-    if (!getToken()) { setLoading(false); return; }
     api.get("/api/auth/session")
       .then(async ({ user: row }) => {
+        clearLegacyToken(); // migrated into the cookie by this call
+        setSessionActive(true);
         setUser(toFrontendUser(row));
         // Awaited (not fire-and-forget): toFrontendUser() only sets a
         // placeholder isMember:false, so pages that gate on `loading` to
@@ -60,41 +61,43 @@ export function AuthProvider({ children }) {
         // otherwise see loading flip to false before the real value lands.
         await refreshMembership();
       })
-      .catch(() => setToken(null))
+      .catch(() => { clearLegacyToken(); setSessionActive(false); })
       .finally(() => setLoading(false));
   }, [refreshMembership]);
 
-  const login = async (email, password) => {
-    const { token, user: row } = await api.post("/api/auth/login", { email, password });
-    setToken(token);
+  // Backend sets the HttpOnly session cookie; nothing to store here.
+  const sessionStarted = (row) => {
+    setSessionActive(true);
     const mapped = toFrontendUser(row);
     setUser(mapped);
     refreshMembership();
     return mapped;
   };
+
+  const login = async (email, password) => {
+    const { user: row } = await api.post("/api/auth/login", { email, password });
+    return sessionStarted(row);
+  };
+
 
   const signup = async ({ name, email, password }) => {
-    const { token, user: row } = await api.post("/api/auth/signup", { full_name: name, email, password });
-    setToken(token);
-    const mapped = toFrontendUser(row);
-    setUser(mapped);
-    refreshMembership();
-    return mapped;
+    const { user: row } = await api.post("/api/auth/signup", { full_name: name, email, password });
+    return sessionStarted(row);
   };
 
-  // Establishes a session from a token issued outside the normal login/signup
-  // calls; the Microsoft OAuth callback and the reset-password flow both
-  // hand back a ready-made session token instead of credentials.
-  const loginWithToken = async (token) => {
-    setToken(token);
+  // Picks up a session the backend just put in the cookie outside the normal
+  // login call (Microsoft callback, reset password, complete signup).
+  const loadSession = async () => {
     const { user: row } = await api.get("/api/auth/session");
-    const mapped = toFrontendUser(row);
-    setUser(mapped);
-    refreshMembership();
-    return mapped;
+    return sessionStarted(row);
   };
 
-  const logout = () => { setUser(null); setToken(null); };
+  const logout = () => {
+    setUser(null);
+    setSessionActive(false);
+    clearLegacyToken();
+    api.post("/api/auth/logout").catch(() => {});
+  };
 
   // Patches fields on the current user client-side only, for things that
   // don't need a round trip. Membership/credits go through
@@ -104,7 +107,7 @@ export function AuthProvider({ children }) {
   };
 
   return (
-    <AuthCtx.Provider value={{ user, loading, login, signup, loginWithToken, logout, updateUser, refreshMembership }}>
+    <AuthCtx.Provider value={{ user, loading, login, signup, loadSession, sessionStarted, logout, updateUser, refreshMembership }}>
       {children}
     </AuthCtx.Provider>
   );

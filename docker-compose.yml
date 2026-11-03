@@ -1,14 +1,27 @@
-# Runs the pre-built multi-arch image published by `docker buildx bake --push`
-# (see docker-bake.hcl). Docker automatically pulls the manifest matching
-# whatever architecture the host is running on.
+# Production stack for makerspace.idri.edu.kh, served through Traefik.
+#
+# The app publishes NO host ports: Traefik (on the shared external network)
+# is the only way in. That keeps TLS termination, the HTTP->HTTPS redirect
+# and the real client IP (X-Forwarded-For, used by the login rate limiter)
+# under Traefik's control instead of letting clients talk to Node directly.
+#
+# Deploy / update on the server (next to this file and the .env):
+#   docker compose pull && docker compose up -d
+# Roll back:  TAG=<previous tag> docker compose up -d
+#
+# Image is built and pushed from a dev machine with:
+#   TAG=<tag> docker buildx bake --push      (see docker-bake.hcl)
+
 services:
   app:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: ${IMAGE:-registry.idri.edu.kh/makerspacecadt/maker_web_cadt}:${TAG:-latest}
     restart: unless-stopped
     environment:
+      NODE_ENV: production
       PORT: 4000
+      # Proxy hops in front of the app (Traefik = 1). Must match reality or
+      # rate limiting is either bypassable (too high) or global (too low).
+      TRUST_PROXY: ${TRUST_PROXY:-1}
       SUPABASE_URL: ${SUPABASE_URL}
       SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY}
       SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY}
@@ -22,5 +35,64 @@ services:
       MICROSOFT_TENANT_ID: ${MICROSOFT_TENANT_ID:-common}
       MICROSOFT_REDIRECT_URI: ${MICROSOFT_REDIRECT_URI}
       MICROSOFT_ALLOWED_EMAIL_DOMAIN: ${MICROSOFT_ALLOWED_EMAIL_DOMAIN}
-    ports:
-      - "80:4000"
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASS: ${SMTP_PASS}
+      SMTP_FROM_NAME: ${SMTP_FROM_NAME}
+
+    # No "ports:" on purpose. Reachable only through Traefik.
+    expose:
+      - "4000"
+    networks:
+      - traefik
+
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=${TRAEFIK_NETWORK:-traefik}
+      # HTTPS router
+      - traefik.http.routers.makerspace.rule=Host(`${APP_HOST:-makerspace.idri.edu.kh}`)
+      - traefik.http.routers.makerspace.entrypoints=${TRAEFIK_HTTPS_ENTRYPOINT:-websecure}
+      - traefik.http.routers.makerspace.tls=true
+      - traefik.http.routers.makerspace.tls.certresolver=${TRAEFIK_CERTRESOLVER:-letsencrypt}
+      - traefik.http.routers.makerspace.service=makerspace
+      - traefik.http.services.makerspace.loadbalancer.server.port=4000
+      - traefik.http.services.makerspace.loadbalancer.healthcheck.path=/api/health
+      - traefik.http.services.makerspace.loadbalancer.healthcheck.interval=30s
+      # Plain HTTP router: only redirects to HTTPS
+      - traefik.http.routers.makerspace-http.rule=Host(`${APP_HOST:-makerspace.idri.edu.kh}`)
+      - traefik.http.routers.makerspace-http.entrypoints=${TRAEFIK_HTTP_ENTRYPOINT:-web}
+      - traefik.http.routers.makerspace-http.middlewares=makerspace-https
+      - traefik.http.middlewares.makerspace-https.redirectscheme.scheme=https
+      - traefik.http.middlewares.makerspace-https.redirectscheme.permanent=true
+
+    # Container hardening: the app only needs to listen on 4000 and talk
+    # out to Supabase / Microsoft / SMTP. Uploads are buffered in memory.
+    user: "node"
+    read_only: true
+    tmpfs:
+      - /tmp:size=16m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 512m
+    pids_limit: 200
+
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:4000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
+
+networks:
+  traefik:
+    external: true
+    name: ${TRAEFIK_NETWORK:-traefik}

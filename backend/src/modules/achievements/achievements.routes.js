@@ -1,12 +1,11 @@
 import { Router } from "express";
-import multer from "multer";
+import { imageUpload as upload } from "../../shared/imageUpload.js";
 import { requireAuth, requireRole } from "../../middleware/requireAuth.js";
 import {
   listAchievements, createAchievement, updateAchievement, deleteAchievement, uploadAchievementIcon,
   getMyAchievements,
 } from "./achievements.controller.js";
 
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
 const router = Router();
 
 router.get("/", requireAuth, listAchievements);

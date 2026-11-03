@@ -1,7 +1,9 @@
 import * as client from "openid-client";
 import bcrypt from "bcrypt";
 import { supabaseAdmin, assertSupabaseConfigured } from "../../config/supabaseClient.js";
-import { signToken, signPurposeToken, verifyToken } from "../../utils/jwt.js";
+import { signToken, signPurposeToken, verifyToken, passwordVersion } from "../../utils/jwt.js";
+import { issueHandoff, consumeHandoff } from "../../shared/handoff.js";
+import { setSessionCookie } from "../../shared/session.js";
 import { normalizeEmail, isDomainAllowed, isStudentIdTaken } from "./auth.controller.js";
 import { uniqueUserNameFromEmail } from "../../shared/userAccounts.js";
 import { toPublicUser } from "../../shared/sanitizeUser.js";
@@ -75,12 +77,14 @@ export async function microsoftLogin(req, res, next) {
     // rides through the same signed state, the same trick claimedEmail uses,
     // so nothing has to be persisted server-side just to survive the
     // redirect to Microsoft and back.
-    const pendingToken = intent === "signup_verify" ? req.query.pendingToken : undefined;
-    if (intent === "signup_verify" && !pendingToken) {
+    // Opaque one-time id from startVerifiedSignup; the pending data itself
+    // stays server-side (shared/handoff.js), never in the URL or OAuth state.
+    const pendingId = intent === "signup_verify" ? String(req.query.pending || "") : undefined;
+    if (intent === "signup_verify" && !pendingId) {
       return res.redirect(frontendRedirect("/register", { error: "invalid_state" }));
     }
     const cfg = await getConfig();
-    const state = signPurposeToken({ intent, claimedEmail, pendingToken, purpose: "oauth_state" }, "10m");
+    const state = signPurposeToken({ intent, claimedEmail, pendingId, purpose: "oauth_state" }, "10m");
     const url = client.buildAuthorizationUrl(cfg, {
       redirect_uri: process.env.MICROSOFT_REDIRECT_URI,
       scope: "openid profile email",
@@ -98,13 +102,13 @@ export async function microsoftCallback(req, res, next) {
   const stateParam = req.query.state;
   let intent = "login";
   let claimedEmail;
-  let pendingToken;
+  let pendingId;
   try {
     const statePayload = verifyToken(stateParam);
     if (statePayload.purpose !== "oauth_state") throw new Error("wrong purpose");
     intent = statePayload.intent;
     claimedEmail = statePayload.claimedEmail;
-    pendingToken = statePayload.pendingToken;
+    pendingId = statePayload.pendingId;
   } catch {
     return res.redirect(frontendRedirect(intent === "reset" ? "/forgot-password" : intent === "signup_verify" ? "/register" : "/login", { error: "invalid_state" }));
   }
@@ -138,13 +142,8 @@ export async function microsoftCallback(req, res, next) {
       if (!isDomainAllowed(email)) {
         return res.redirect(frontendRedirect("/register", { error: "domain_not_allowed" }));
       }
-      let pending;
-      try {
-        pending = verifyToken(pendingToken);
-      } catch {
-        return res.redirect(frontendRedirect("/register", { error: "invalid_state" }));
-      }
-      if (pending.purpose !== "pending_signup" || pending.email !== email) {
+      const pending = consumeHandoff(pendingId, "pending_signup");
+      if (!pending || pending.email !== email) {
         return res.redirect(frontendRedirect("/register", { error: "invalid_state" }));
       }
 
@@ -175,8 +174,8 @@ export async function microsoftCallback(req, res, next) {
         .single();
       if (insertError) throw insertError;
 
-      const sessionToken = signToken({ user_id: newUser.user_id, role: newUser.role });
-      return res.redirect(frontendRedirect("/auth/callback", { token: sessionToken }));
+      const code = issueHandoff("session", { token: signToken(newUser) });
+      return res.redirect(frontendRedirect("/auth/callback", { code }));
     }
 
     let user = await findOrLinkUser({ msId, email });
@@ -185,8 +184,12 @@ export async function microsoftCallback(req, res, next) {
       if (!user || user.status !== "active") {
         return res.redirect(frontendRedirect("/forgot-password", { error: user ? "inactive" : "no_account" }));
       }
-      const resetToken = signPurposeToken({ user_id: user.user_id, purpose: "pwd_reset" }, "15m");
-      return res.redirect(frontendRedirect("/reset-password", { token: resetToken }));
+      // Bound to the current password (pwv): usable once, see resetPassword.
+      const resetToken = signPurposeToken(
+        { user_id: user.user_id, purpose: "pwd_reset", pwv: passwordVersion(user.password_hash) }, "15m"
+      );
+      const code = issueHandoff("pwd_reset", { token: resetToken }, 5 * 60);
+      return res.redirect(frontendRedirect("/reset-password", { code }));
     }
 
     // intent === "login", no existing account: Microsoft only verified the
@@ -197,7 +200,8 @@ export async function microsoftCallback(req, res, next) {
         return res.redirect(frontendRedirect("/login", { error: "domain_not_allowed" }));
       }
       const signupToken = signPurposeToken({ msId, email, name, purpose: "ms_signup" }, "15m");
-      return res.redirect(frontendRedirect("/complete-signup", { token: signupToken, email, name }));
+      const code = issueHandoff("ms_signup", { token: signupToken, email, name }, 5 * 60);
+      return res.redirect(frontendRedirect("/complete-signup", { code }));
     }
 
     if (user.status !== "active") {
@@ -205,8 +209,8 @@ export async function microsoftCallback(req, res, next) {
     }
 
     await supabaseAdmin.from("users").update({ last_login_at: new Date().toISOString() }).eq("user_id", user.user_id);
-    const token = signToken({ user_id: user.user_id, role: user.role });
-    return res.redirect(frontendRedirect("/auth/callback", { token }));
+    const code = issueHandoff("session", { token: signToken(user) });
+    return res.redirect(frontendRedirect("/auth/callback", { code }));
   } catch (err) {
     next(err);
   }
@@ -223,8 +227,8 @@ export async function microsoftCompleteSignup(req, res, next) {
     if (!full_name || !password || !student_id) {
       return res.status(400).json({ error: "full_name, password, and student_id are required" });
     }
-    if (password.length < 6) {
-      return res.status(400).json({ error: "Password must be at least 6 characters" });
+    if (password.length < 8) {
+      return res.status(400).json({ error: "Password must be at least 8 characters" });
     }
 
     let payload;
@@ -274,8 +278,8 @@ export async function microsoftCompleteSignup(req, res, next) {
       .single();
     if (insertError) throw insertError;
 
-    const sessionToken = signToken({ user_id: user.user_id, role: user.role });
-    res.status(201).json({ token: sessionToken, user: toPublicUser(user) });
+    setSessionCookie(res, signToken(user));
+    res.status(201).json({ user: toPublicUser(user) });
   } catch (err) {
     next(err);
   }

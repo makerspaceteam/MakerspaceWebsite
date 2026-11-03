@@ -145,8 +145,14 @@ export async function toggleLike(req, res, next) {
 export async function createCommunityPost(req, res, next) {
   if (!assertSupabaseConfigured(res)) return;
   try {
-    const { tags, ...postFields } = req.body;
-    const tagNames = Array.isArray(tags) ? tags : [];
+    const { tags } = req.body;
+    // Only these columns come from the client; ids/timestamps/owner are server-set.
+    const postFields = {
+      title: req.body.title,
+      content: req.body.content,
+      category: req.body.category,
+    };
+    const tagNames = (Array.isArray(tags) ? tags : []).filter((t) => typeof t === "string").slice(0, 20);
 
     // "Announcement" is the makerspace's own voice, so only staff/admin can
     // post it; the frontend hides the option from everyone else, but that

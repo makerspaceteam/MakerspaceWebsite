@@ -1,23 +1,22 @@
 import { Router } from "express";
-import multer from "multer";
 import { createCrudRouter } from "../../shared/crudRouter.js";
 import { requireAuth, requireRole } from "../../middleware/requireAuth.js";
 import * as ctrl from "./inventory.controller.js";
+import { imageUpload as upload } from "../../shared/imageUpload.js";
 
-const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
 
 const router = Router();
 // Backend roles are lowercase ('admin'/'staff'); see users.role CHECK constraint.
 const STAFF = requireRole("admin", "staff");
 
-// Items, filaments, categories, locations: public reads, authed writes.
+// Items, filaments, categories, locations: public reads, staff-only writes.
 // This schema has per-table PK names, so pkColumn must be set explicitly.
 // Newest first: every items/filaments list (browse, catalog, manage stock)
 // shows the most recently created entries at the top.
-router.use("/items", createCrudRouter("inventory_items", { pkColumn: "item_id", orderBy: { column: "created_at", ascending: false } }));
-router.use("/filaments", createCrudRouter("filaments", { pkColumn: "filament_id", orderBy: { column: "created_at", ascending: false } }));
-router.use("/categories", createCrudRouter("categories", { pkColumn: "category_id" }));
-router.use("/locations", createCrudRouter("location_items", { pkColumn: "location_id" }));
+router.use("/items", createCrudRouter("inventory_items", { pkColumn: "item_id", writeRoles: ["admin", "staff"], orderBy: { column: "created_at", ascending: false } }));
+router.use("/filaments", createCrudRouter("filaments", { pkColumn: "filament_id", writeRoles: ["admin", "staff"], orderBy: { column: "created_at", ascending: false } }));
+router.use("/categories", createCrudRouter("categories", { pkColumn: "category_id", writeRoles: ["admin", "staff"] }));
+router.use("/locations", createCrudRouter("location_items", { pkColumn: "location_id", writeRoles: ["admin", "staff"] }));
 // Lab Service page cards (Document Printing, 3D Printing, CNC machines, and
 // whatever staff add later) — editable from Manage Stock instead of code.
 router.use("/lab-services", createCrudRouter("lab_services", { pkColumn: "service_id", writeRoles: ["admin", "staff"], orderBy: { column: "sort_order", ascending: true } }));

@@ -1,4 +1,5 @@
 import { supabaseAdmin, assertSupabaseConfigured } from "../../config/supabaseClient.js";
+import { safeHttpUrl } from "../../shared/safeUrl.js";
 import { normalizeRow } from "../../shared/normalizeTimestamps.js";
 import { parsePagination } from "../../shared/pagination.js";
 
@@ -40,6 +41,9 @@ function toEventRow(payload) {
   delete row.event_id;
   delete row.created_by;
   delete row.created_at;
+  for (const col of ["registration_url", "gallery_url"]) {
+    if (col in row) row[col] = safeHttpUrl(row[col]);
+  }
   // Cover mirror for the legacy column, kept in sync so anything still
   // reading image_url directly (e.g. an un-migrated report/query) sees the
   // current cover image.

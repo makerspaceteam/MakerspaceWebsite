@@ -1,6 +1,7 @@
 import { supabaseAdmin } from "../../config/supabaseClient.js";
 import { adjustCredits, getMembershipByUserId, CreditsError } from "../../shared/credits.js";
 import { normalizeRow } from "../../shared/normalizeTimestamps.js";
+import { parseQuantity } from "../../shared/quantity.js";
 
 const CREDIT_RATE = 40;               // credits granted per $1 topped up
 const MEMBERSHIP_PLAN = { price: 20, bonusCredits: 200 };
@@ -194,6 +195,16 @@ export async function createRequest(req, res, next) {
     for (const f of allowed) if (req.body[f] !== undefined) payload[f] = req.body[f];
 
     if ((request_type === "borrow" || request_type === "purchase") && !payload.item_id) return res.status(400).json({ error: "item_id is required" });
+    if (request_type === "borrow" || request_type === "purchase") {
+      const qty = parseQuantity(payload.quantity);
+      if (qty === null) return res.status(400).json({ error: "quantity must be a whole number from 1 to 1000" });
+      payload.quantity = qty;
+    }
+    if (request_type === "credit_topup") {
+      const amount = Number(payload.amount_usd);
+      if (!Number.isFinite(amount) || amount <= 0 || amount > 10000) return res.status(400).json({ error: "amount_usd must be a positive number up to 10000" });
+      payload.amount_usd = amount;
+    }
     if (request_type === "credit_topup" && !(payload.amount_usd > 0)) return res.status(400).json({ error: "amount_usd must be positive" });
     if (request_type === "printing" && !(payload.pages > 0)) return res.status(400).json({ error: "pages must be positive" });
     if (request_type === "3d_printing" && !payload.filament_id) return res.status(400).json({ error: "filament_id is required" });
@@ -219,8 +230,11 @@ export async function approveBorrowGroup(req, res, next) {
     if (reqErr) throw reqErr;
     if (!requests.length) return res.status(404).json({ error: "No matching pending borrow requests" });
 
+    if (requests.some((r) => parseQuantity(r.quantity) === null)) {
+      return res.status(400).json({ error: "A request in this group has an invalid quantity; deny it instead" });
+    }
     for (const r of requests) {
-      const qty = r.quantity || 1;
+      const qty = parseQuantity(r.quantity);
       await changeStock(r.item_id, -qty);
       const { error: borrowErr } = await supabaseAdmin.from("borrow_transactions").insert({
         user_id: r.user_id, item_id: r.item_id, quantity_borrow: qty,
@@ -264,9 +278,15 @@ export async function approvePurchaseGroup(req, res, next) {
     if (reqErr) throw reqErr;
     if (!requests.length) return res.status(404).json({ error: "No matching pending purchase requests" });
 
+    if (requests.some((r) => parseQuantity(r.quantity) === null)) {
+      return res.status(400).json({ error: "A request in this group has an invalid quantity; deny it instead" });
+    }
     const userId = requests[0].user_id;
+    if (requests.some((r) => r.user_id !== userId)) {
+      return res.status(400).json({ error: "All requests in a group must belong to the same user" });
+    }
     const lines = requests.map((r) => ({
-      itemId: r.item_id, quantity: r.quantity || 1,
+      itemId: r.item_id, quantity: parseQuantity(r.quantity),
       unitPrice: r.inventory_items?.unit_credit ?? 0,
     }));
     const totalCredits = lines.reduce((s, l) => s + l.unitPrice * l.quantity, 0);
@@ -276,7 +296,7 @@ export async function approvePurchaseGroup(req, res, next) {
       description: `Approved purchase ${requests[0].order_id || requests[0].request_id}`,
     });
 
-    for (const r of requests) await changeStock(r.item_id, -(r.quantity || 1));
+    for (const l of lines) await changeStock(l.itemId, -l.quantity);
 
     await createPaidInvoice({
       userId, invoiceType: "item_purchase", totalCredit: totalCredits,
@@ -726,8 +746,10 @@ export async function staffSale(req, res, next) {
     let creditsCharged = 0;
     const results = [];
 
+    if (cart.length > 50) return res.status(400).json({ error: "Cart has too many lines" });
     for (const line of cart) {
-      const qty = line.qty || 1;
+      const qty = parseQuantity(line?.qty);
+      if (qty === null) return res.status(400).json({ error: "qty must be a whole number from 1 to 1000" });
       const item = await changeStock(line.itemId, -qty);
 
       if (line.action === "purchase") {
@@ -777,8 +799,10 @@ export async function selfPurchase(req, res, next) {
 
     const lines = [];
     let total = 0;
+    if (cart.length > 50) return res.status(400).json({ error: "Cart has too many lines" });
     for (const line of cart) {
-      const qty = line.qty || 1;
+      const qty = parseQuantity(line?.qty);
+      if (qty === null) return res.status(400).json({ error: "qty must be a whole number from 1 to 1000" });
       const { data: item, error } = await supabaseAdmin
         .from("inventory_items").select("item_id, item_name, unit_credit, current_stock, is_returnable")
         .eq("item_id", line.itemId).single();

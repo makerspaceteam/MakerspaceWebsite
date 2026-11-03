@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { getToken } from "../../lib/api/client";
+import { useAuth } from "../../hub/AuthContext";
 import { learningApi } from "../../lib/api/learning";
 
 /**
@@ -10,14 +10,19 @@ import { learningApi } from "../../lib/api/learning";
  */
 export function useEnrollment(courseId) {
   const id = Number(courseId);
-  const signedIn = Boolean(getToken());
+  // Session is an HttpOnly cookie now, so "signed in" comes from AuthContext
+  // (which asked the server) instead of peeking at localStorage.
+  const auth = useAuth();
+  const authLoading = auth?.loading ?? false;
+  const signedIn = Boolean(auth?.user);
   const [enrolled, setEnrolled] = useState(false);
   const [enrolling, setEnrolling] = useState(false);
   const [myStars, setMyStars] = useState(0);
-  const [loaded, setLoaded] = useState(!signedIn);
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
-    if (!signedIn || !id) return;
+    if (authLoading) return;
+    if (!signedIn || !id) { setLoaded(true); return; }
     learningApi
       .myLearning()
       .then(({ enrolledCourseIds, myRatings }) => {
@@ -28,7 +33,7 @@ export function useEnrollment(courseId) {
         /* backend down or token invalid, leave as not enrolled */
       })
       .finally(() => setLoaded(true));
-  }, [signedIn, id]);
+  }, [authLoading, signedIn, id]);
 
   const enroll = useCallback(async () => {
     if (!signedIn || !id) return false;

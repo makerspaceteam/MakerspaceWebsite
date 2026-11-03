@@ -29,12 +29,23 @@ import { parsePagination } from "./pagination.js";
 // ({ user_id, full_name, user_name, profile_img_url }) embedded via the
 // ownerField's FK to `users`, so the frontend can show who actually posted
 // instead of a placeholder. Requires ownerField to be a real FK to users.
+// writableFields: if set, POST/PUT bodies are reduced to exactly these
+// columns, so a caller can't set server-managed columns (created_at, ids,
+// counters, ownership) by adding them to the JSON.
+// validateWrite: optional (req, payload) => null | { status, error } run on
+// updates after field filtering, for table-specific rules (e.g. who may set
+// a category).
 // orderBy: { column, ascending } applied to the list endpoint (GET /).
 // Without it, row order is whatever Postgres feels like, which isn't a
 // contract worth relying on. Omit for tables where the frontend does its
 // own sorting/filtering (e.g. events, sorted by start_date client-side).
-export function createCrudRouter(table, { pkColumn = "id", ownerField, writeRoles, moderatorRoles = ["admin", "staff"], embedAuthor = false, orderBy } = {}) {
+export function createCrudRouter(table, { pkColumn = "id", ownerField, writeRoles, moderatorRoles = ["admin", "staff"], embedAuthor = false, orderBy, writableFields, validateWrite } = {}) {
   const router = Router();
+  const pickWritable = (body) => {
+    const src = body && typeof body === "object" && !Array.isArray(body) ? body : {};
+    if (!writableFields) return { ...src };
+    return Object.fromEntries(writableFields.filter((f) => src[f] !== undefined).map((f) => [f, src[f]]));
+  };
   const guardCreate = writeRoles ? [requireAuth, requireRole(...writeRoles)] : [requireAuth];
   const selectClause = embedAuthor
     ? `*, author:users!${ownerField}(user_id, full_name, user_name, profile_img_url)`
@@ -92,7 +103,8 @@ export function createCrudRouter(table, { pkColumn = "id", ownerField, writeRole
 
   router.post("/", ...guardCreate, async (req, res, next) => {
     try {
-      const payload = ownerField ? { ...req.body, [ownerField]: req.user.user_id } : req.body;
+      const payload = pickWritable(req.body);
+      if (ownerField) payload[ownerField] = req.user.user_id;
       const { data, error } = await supabaseAdmin.from(table).insert(payload).select(selectClause).single();
       if (error) throw error;
       res.status(201).json({ data: normalizeRow(data) });
@@ -105,8 +117,12 @@ export function createCrudRouter(table, { pkColumn = "id", ownerField, writeRole
     try {
       // Ownership is fixed at creation. Never let an update payload hand a
       // row off to a different owner.
-      const payload = ownerField ? { ...req.body } : req.body;
+      const payload = pickWritable(req.body);
       if (ownerField) delete payload[ownerField];
+      delete payload[pkColumn];
+      if (Object.keys(payload).length === 0) return res.status(400).json({ error: "No updatable fields provided" });
+      const problem = validateWrite?.(req, payload);
+      if (problem) return res.status(problem.status || 400).json({ error: problem.error });
       const { data, error } = await supabaseAdmin.from(table).update(payload).eq(pkColumn, req.params.id).select(selectClause).single();
       if (error) throw error;
       res.json({ data: normalizeRow(data) });

@@ -1,6 +1,8 @@
 import bcrypt from "bcrypt";
 import { supabaseAdmin, assertSupabaseConfigured } from "../../config/supabaseClient.js";
-import { signToken, verifyToken, signPurposeToken } from "../../utils/jwt.js";
+import { signToken, verifyToken, passwordVersion } from "../../utils/jwt.js";
+import { setSessionCookie, clearSessionCookie } from "../../shared/session.js";
+import { issueHandoff, consumeHandoff } from "../../shared/handoff.js";
 import { toPublicUser } from "../../shared/sanitizeUser.js";
 
 const SALT_ROUNDS = 10;
@@ -48,8 +50,8 @@ export async function startVerifiedSignup(req, res, next) {
     if (!full_name || !normalizedEmail || !password || !student_id) {
       return res.status(400).json({ error: "full_name, email, password, and student_id are required" });
     }
-    if (password.length < 6) {
-      return res.status(400).json({ error: "Password must be at least 6 characters" });
+    if (password.length < 8) {
+      return res.status(400).json({ error: "Password must be at least 8 characters" });
     }
     if (!isDomainAllowed(normalizedEmail)) {
       return res.status(403).json({ error: "Sign up with your CADT email address (e.g. @cadt.edu.kh)." });
@@ -67,11 +69,15 @@ export async function startVerifiedSignup(req, res, next) {
     }
 
     const password_hash = await bcrypt.hash(password, SALT_ROUNDS);
-    const pendingToken = signPurposeToken(
-      { full_name, email: normalizedEmail, student_id, password_hash, purpose: "pending_signup" },
-      "15m"
+    // Kept server-side: only an opaque one-time id travels through the
+    // Microsoft redirect, so the password hash never appears in a URL, in
+    // the OAuth state sent to Microsoft, or in any access log.
+    const pendingId = issueHandoff(
+      "pending_signup",
+      { full_name, email: normalizedEmail, student_id, password_hash },
+      15 * 60
     );
-    res.json({ pendingToken });
+    res.json({ pendingId });
   } catch (err) {
     next(err);
   }
@@ -100,8 +106,8 @@ export async function login(req, res, next) {
 
     await supabaseAdmin.from("users").update({ last_login_at: new Date().toISOString() }).eq("user_id", user.user_id);
 
-    const token = signToken({ user_id: user.user_id, role: user.role });
-    res.json({ token, user: toPublicUser(user) });
+    setSessionCookie(res, signToken(user));
+    res.json({ user: toPublicUser(user) });
   } catch (err) {
     next(err);
   }
@@ -112,18 +118,14 @@ export async function login(req, res, next) {
 export async function forgotPasswordCheck(req, res, next) {
   if (!assertSupabaseConfigured(res)) return;
   try {
-    const { email } = req.body;
-    if (!email) return res.status(400).json({ error: "email is required" });
-
-    const { data: user, error } = await supabaseAdmin
-      .from("users")
-      .select("user_id, status")
-      .eq("email", email.toLowerCase())
-      .maybeSingle();
-    if (error) throw error;
-    if (!user) return res.status(404).json({ error: "We couldn't find an account with that email" });
-    if (user.status !== "active") return res.status(403).json({ error: "This account is inactive. Contact an admin for help" });
-
+    const email = normalizeEmail(req.body.email);
+    if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) {
+      return res.status(400).json({ error: "Enter a valid email address" });
+    }
+    // Same answer whether or not an account exists, so this endpoint can't
+    // be used to discover who is registered. Whether the account exists is
+    // only revealed after the person proves they own the mailbox by signing
+    // in to Microsoft as it (see microsoftCallback's "reset" intent).
     res.json({ ok: true });
   } catch (err) {
     next(err);
@@ -140,8 +142,8 @@ export async function resetPassword(req, res, next) {
     if (!token || !newPassword) {
       return res.status(400).json({ error: "token and newPassword are required" });
     }
-    if (newPassword.length < 6) {
-      return res.status(400).json({ error: "Password must be at least 6 characters" });
+    if (newPassword.length < 8) {
+      return res.status(400).json({ error: "Password must be at least 8 characters" });
     }
 
     let payload;
@@ -152,6 +154,15 @@ export async function resetPassword(req, res, next) {
     }
     if (payload.purpose !== "pwd_reset") {
       return res.status(401).json({ error: "This reset link is invalid or has expired" });
+    }
+    // Single use: the token is bound to the password it was issued against.
+    // Once any password change happens, this (and every other) reset token
+    // for the account stops working.
+    const { data: current, error: currentErr } = await supabaseAdmin
+      .from("users").select("password_hash, status").eq("user_id", payload.user_id).maybeSingle();
+    if (currentErr) throw currentErr;
+    if (!current || current.status !== "active" || payload.pwv !== passwordVersion(current.password_hash)) {
+      return res.status(401).json({ error: "This reset link is invalid or has already been used" });
     }
 
     const password_hash = await bcrypt.hash(newPassword, SALT_ROUNDS);
@@ -164,9 +175,35 @@ export async function resetPassword(req, res, next) {
     if (error) throw error;
     if (!user) return res.status(401).json({ error: "Account no longer exists" });
 
-    const sessionToken = signToken({ user_id: user.user_id, role: user.role });
-    res.json({ token: sessionToken, user: toPublicUser(user) });
+    setSessionCookie(res, signToken(user));
+    res.json({ user: toPublicUser(user) });
   } catch (err) {
     next(err);
   }
+}
+
+// Swaps a one-time handoff code (from a Microsoft redirect) for what it
+// stands for. kind=session also signs the browser in via the HttpOnly cookie.
+const EXCHANGE_KINDS = ["session", "pwd_reset", "ms_signup"];
+export async function exchangeHandoff(req, res, next) {
+  try {
+    const { code, kind } = req.body || {};
+    if (!EXCHANGE_KINDS.includes(kind)) return res.status(400).json({ error: "Invalid kind" });
+    const payload = consumeHandoff(code, kind);
+    if (!payload) return res.status(401).json({ error: "This link is invalid or has expired. Please start again." });
+
+    if (kind === "session") {
+      setSessionCookie(res, payload.token);
+      return res.json({ ok: true });
+    }
+    // pwd_reset: { token }   ms_signup: { token, email, name }
+    res.json(payload);
+  } catch (err) {
+    next(err);
+  }
+}
+
+export function logout(req, res) {
+  clearSessionCookie(res);
+  res.status(204).end();
 }

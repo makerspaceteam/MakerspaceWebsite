@@ -81,12 +81,20 @@ export async function getCollabPost(req, res, next) {
 // tagResolver.js) instead of inserted fresh every time, so the same skill
 // typed on different posts collapses to one tag row, same helper post_tags
 // uses for community posts.
+export const COLLAB_WRITABLE = [
+  "project_title", "category", "short_pitch", "description", "post_type",
+  "team_size_current", "team_size_target", "contact_email", "contact_discord",
+  "contact_telegram", "status",
+];
+
 export async function createCollabPost(req, res, next) {
   if (!assertSupabaseConfigured(res)) return;
   try {
-    const { roles_needed, skills, ...postFields } = req.body;
-    const roleNames = Array.isArray(roles_needed) ? [...new Set(roles_needed.map(r => r.trim()).filter(Boolean))] : [];
-    const skillNames = Array.isArray(skills) ? skills : [];
+    const { roles_needed, skills } = req.body;
+    // Only these columns come from the client; ids/timestamps/owner are server-set.
+    const postFields = Object.fromEntries(COLLAB_WRITABLE.filter((f) => req.body[f] !== undefined).map((f) => [f, req.body[f]]));
+    const roleNames = Array.isArray(roles_needed) ? [...new Set(roles_needed.filter((r) => typeof r === "string").map(r => r.trim()).filter(Boolean))].slice(0, 20) : [];
+    const skillNames = (Array.isArray(skills) ? skills : []).filter((t) => typeof t === "string").slice(0, 20);
 
     const { data: post, error: postErr } = await supabaseAdmin
       .from("collaboration_posts")
