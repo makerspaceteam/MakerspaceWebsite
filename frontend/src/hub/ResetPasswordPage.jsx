@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { KeyRound } from "lucide-react";
 import { HubNav } from "./HubNav";
@@ -10,8 +10,23 @@ import { D, GRADIENT, ErrorBox, PasswordField } from "./authUi";
 export default function ResetPasswordPage() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { loginWithToken } = useAuth();
-  const token = new URLSearchParams(location.search).get("token");
+  const { sessionStarted } = useAuth();
+  // The link carries a one-time code, swapped on load for the reset token,
+  // which is then held only in memory (never in the URL or storage).
+  const [token, setToken] = useState(null);
+  const exchanged = useRef(false);
+  const [checking, setChecking] = useState(true);
+  useEffect(() => {
+    if (exchanged.current) return;
+    exchanged.current = true;
+    const code = new URLSearchParams(location.search).get("code");
+    window.history.replaceState(null, "", location.pathname);
+    if (!code) { setChecking(false); setError("This reset link is invalid or has expired. Please start again."); return; }
+    api.post("/api/auth/exchange", { code, kind: "pwd_reset" })
+      .then(({ token: t }) => setToken(t))
+      .catch((err) => setError(err.message || "This reset link is invalid or has expired. Please start again."))
+      .finally(() => setChecking(false));
+  }, [location.search, location.pathname]);
 
   const [password, setPassword] = useState("");
   const [confirm, setConfirm]   = useState("");
@@ -22,12 +37,13 @@ export default function ResetPasswordPage() {
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
-    if (password.length < 6) { setError("Password must be at least 6 characters."); return; }
+    if (password.length < 8) { setError("Password must be at least 8 characters."); return; }
     if (password !== confirm) { setError("Passwords don't match."); return; }
+    if (!token) { setError("This reset link is invalid or has expired. Please start again."); return; }
     setLoading(true);
     try {
-      const { token: sessionToken } = await api.post("/api/auth/reset-password", { token, newPassword: password });
-      const mapped = await loginWithToken(sessionToken);
+      const { user: row } = await api.post("/api/auth/reset-password", { token, newPassword: password });
+      const mapped = sessionStarted(row);
       navigate(destinationFor(mapped.role), { replace: true });
     } catch (err) {
       setError(err.message || "Something went wrong. Please try again.");
@@ -49,7 +65,9 @@ export default function ResetPasswordPage() {
           <KeyRound size={18} color="white" strokeWidth={2.2} />
         </div>
 
-        {!token ? (
+        {checking ? (
+          <p className="text-sm" style={{ color: D.muted }}>Checking your link…</p>
+        ) : !token ? (
           <>
             <h1 className="text-2xl font-extrabold" style={{ color: D.text }}>This link is invalid</h1>
             <p className="text-sm leading-relaxed" style={{ color: D.muted }}>
@@ -69,7 +87,7 @@ export default function ResetPasswordPage() {
 
               <div className="flex flex-col gap-1.5">
                 <label className="text-xs font-semibold" style={{ color: D.muted }}>New Password</label>
-                <PasswordField value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Min. 6 characters" autoComplete="new-password" show={showPw} onToggleShow={() => setShowPw(v => !v)} />
+                <PasswordField value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Min. 8 characters" autoComplete="new-password" show={showPw} onToggleShow={() => setShowPw(v => !v)} />
               </div>
 
               <div className="flex flex-col gap-1.5">

@@ -304,8 +304,8 @@ export default function AdminUsers() {
       setCreateError("Name, email, and password are required.");
       return;
     }
-    if (createForm.password.length < 6) {
-      setCreateError("Password must be at least 6 characters.");
+    if (createForm.password.length < 8) {
+      setCreateError("Password must be at least 8 characters.");
       return;
     }
     setCreateBusy(true);
@@ -673,7 +673,7 @@ export default function AdminUsers() {
               <input
                 type="password" value={createForm.password}
                 onChange={(e) => setCreateForm((f) => ({ ...f, password: e.target.value }))}
-                placeholder="Temporary password (min. 6 characters)" className={inputCls}
+                placeholder="Temporary password (min. 8 characters)" className={inputCls}
               />
               {isAdmin && (
                 <select

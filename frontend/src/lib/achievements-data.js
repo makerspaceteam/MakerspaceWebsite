@@ -1,4 +1,4 @@
-import { api, getToken, BASE_URL } from "./api/client";
+import { api, authFetch, BASE_URL } from "./api/client";
 
 // Mirrors backend/src/modules/achievements/achievements.controller.js's
 // REQUIREMENT_TYPES: kept to a fixed set of real, countable actions rather
@@ -62,9 +62,8 @@ export async function deleteAchievement(id) {
 export async function uploadAchievementIcon(file) {
   const form = new FormData();
   form.append("icon", file);
-  const res = await fetch(`${BASE_URL}/api/achievements/upload-icon`, {
+  const res = await authFetch(`/api/achievements/upload-icon`, {
     method: "POST",
-    headers: { Authorization: `Bearer ${getToken()}` },
     body: form,
   });
   const data = await res.json().catch(() => ({}));

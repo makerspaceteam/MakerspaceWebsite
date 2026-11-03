@@ -1,6 +1,9 @@
 import bcrypt from "bcrypt";
 import { supabaseAdmin, assertSupabaseConfigured } from "../../config/supabaseClient.js";
 import { toPublicUser } from "../../shared/sanitizeUser.js";
+import { safeHttpUrl } from "../../shared/safeUrl.js";
+import { signToken } from "../../utils/jwt.js";
+import { setSessionCookie } from "../../shared/session.js";
 import { uniqueUserNameFromEmail } from "../../shared/userAccounts.js";
 import { normalizeEmail, isStudentIdTaken } from "../auth/auth.controller.js";
 
@@ -36,7 +39,7 @@ export async function updateMe(req, res, next) {
     }
     if (req.body.phone_number !== undefined) payload.phone_number = req.body.phone_number.trim() || null;
     if (req.body.bio !== undefined) payload.bio = req.body.bio.trim() || null;
-    if (req.body.profile_img_url !== undefined) payload.profile_img_url = req.body.profile_img_url || null;
+    if (req.body.profile_img_url !== undefined) payload.profile_img_url = safeHttpUrl(req.body.profile_img_url);
 
     const { data, error } = await supabaseAdmin
       .from("users")
@@ -62,8 +65,8 @@ export async function changeMyPassword(req, res, next) {
     if (!current_password || !new_password) {
       return res.status(400).json({ error: "current_password and new_password are required" });
     }
-    if (new_password.length < 6) {
-      return res.status(400).json({ error: "New password must be at least 6 characters" });
+    if (new_password.length < 8) {
+      return res.status(400).json({ error: "New password must be at least 8 characters" });
     }
 
     const { data: user, error: lookupError } = await supabaseAdmin
@@ -83,6 +86,10 @@ export async function changeMyPassword(req, res, next) {
       .eq("user_id", req.user.user_id);
     if (updateError) throw updateError;
 
+    // The new password invalidates every existing session (pwv in the JWT),
+    // including this one, so hand this browser a fresh cookie. Other devices
+    // are signed out.
+    setSessionCookie(res, signToken({ ...req.user, password_hash }));
     res.json({ data: { ok: true } });
   } catch (err) {
     next(err);
@@ -135,8 +142,8 @@ export async function createUser(req, res, next) {
     if (!full_name || !normalizedEmail || !password) {
       return res.status(400).json({ error: "full_name, email, and password are required" });
     }
-    if (password.length < 6) {
-      return res.status(400).json({ error: "Password must be at least 6 characters" });
+    if (password.length < 8) {
+      return res.status(400).json({ error: "Password must be at least 8 characters" });
     }
     const role = req.user.role === "admin" && ASSIGNABLE_ROLES.includes(req.body.role)
       ? req.body.role
@@ -178,6 +185,15 @@ export async function setUserStatus(req, res, next) {
     const targetId = Number(req.params.id);
     if (targetId === req.user.user_id) {
       return res.status(400).json({ error: "You can't change your own account status." });
+    }
+    const { data: target, error: targetErr } = await supabaseAdmin
+      .from("users").select("role").eq("user_id", targetId).maybeSingle();
+    if (targetErr) throw targetErr;
+    if (!target) return res.status(404).json({ error: "User not found" });
+    // Staff may manage regular accounts only; admin/staff accounts are
+    // admin-managed, so a staff account can't lock out an admin.
+    if (req.user.role !== "admin" && ["admin", "staff"].includes(target.role)) {
+      return res.status(403).json({ error: "Only an admin can change the status of admin or staff accounts" });
     }
     const { data, error } = await supabaseAdmin
       .from("users")

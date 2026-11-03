@@ -1,4 +1,4 @@
-import { api, getToken, BASE_URL } from "./api/client";
+import { api, authFetch, BASE_URL } from "./api/client";
 
 // Real events (from the `events` table) don't carry a tag list or a
 // per-event organizer profile yet. Those need their own tables/routes we
@@ -80,9 +80,8 @@ export async function deleteEvent(id) {
 export async function uploadEventImage(file) {
   const form = new FormData();
   form.append("image", file);
-  const res = await fetch(`${BASE_URL}/api/community/events/upload-image`, {
+  const res = await authFetch(`/api/community/events/upload-image`, {
     method: "POST",
-    headers: { Authorization: `Bearer ${getToken()}` },
     body: form,
   });
   const data = await res.json().catch(() => ({}));

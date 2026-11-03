@@ -1,4 +1,5 @@
 import bcrypt from "bcrypt";
+import { safeHttpUrl } from "../../shared/safeUrl.js";
 import { supabaseAdmin, assertSupabaseConfigured } from "../../config/supabaseClient.js";
 import { uniqueUserNameFromEmail } from "../../shared/userAccounts.js";
 import { adjustCredits, CreditsError } from "../../shared/credits.js";
@@ -81,8 +82,8 @@ function toCourseRow(payload) {
     cover_color: payload.coverColor || null,
     spine_color: payload.spineColor || null,
     paths: Array.isArray(payload.paths) && payload.paths.length ? payload.paths : ["basic"],
-    interactive_price: payload.interactivePrice ?? null,
-    ai_agent_url: payload.aiAgentUrl || null,
+    interactive_price: Number.isFinite(Number(payload.interactivePrice)) && Number(payload.interactivePrice) >= 0 ? Number(payload.interactivePrice) : null,
+    ai_agent_url: safeHttpUrl(payload.aiAgentUrl) ?? null,
     tags: Array.isArray(payload.tags) ? payload.tags : [],
     instructor_id: payload.instructorId || null,
   };
@@ -283,8 +284,8 @@ export async function createLecturer(req, res, next) {
     if (!name || !email || !password) {
       return res.status(400).json({ error: "name, email, and password are required" });
     }
-    if (password.length < 6) {
-      return res.status(400).json({ error: "Password must be at least 6 characters" });
+    if (password.length < 8) {
+      return res.status(400).json({ error: "Password must be at least 8 characters" });
     }
 
     const { data: existing, error: lookupError } = await supabaseAdmin

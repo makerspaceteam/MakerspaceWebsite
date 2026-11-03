@@ -203,14 +203,14 @@ export default function AuthPage() {
     e.preventDefault();
     setError("");
     if (!regForm.name || !regForm.email || !regForm.studentId.trim() || !regForm.password) { setError("Please fill in all fields."); return; }
-    if (regForm.password.length < 6) { setError("Password must be at least 6 characters."); return; }
+    if (regForm.password.length < 8) { setError("Password must be at least 8 characters."); return; }
     if (regForm.password !== regForm.confirm) { setError("Passwords don't match."); return; }
     setLoading(true);
     try {
-      const { pendingToken } = await api.post("/api/auth/signup/verify-start", {
+      const { pendingId } = await api.post("/api/auth/signup/verify-start", {
         full_name: regForm.name, email: regForm.email, student_id: regForm.studentId.trim(), password: regForm.password,
       });
-      const params = new URLSearchParams({ intent: "signup_verify", email: regForm.email, pendingToken });
+      const params = new URLSearchParams({ intent: "signup_verify", email: regForm.email, pending: pendingId });
       window.location.href = `${BASE_URL}/api/auth/microsoft/login?${params.toString()}`;
     } catch (err) {
       setError(err.message || "Something went wrong. Please try again.");

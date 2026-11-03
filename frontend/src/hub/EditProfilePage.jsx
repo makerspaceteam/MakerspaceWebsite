@@ -109,7 +109,7 @@ export default function EditProfilePage() {
     e.preventDefault();
     setPwError("");
     if (!pwForm.current || !pwForm.next) { setPwError("Fill in both password fields."); return; }
-    if (pwForm.next.length < 6) { setPwError("New password must be at least 6 characters."); return; }
+    if (pwForm.next.length < 8) { setPwError("New password must be at least 8 characters."); return; }
     if (pwForm.next !== pwForm.confirm) { setPwError("New passwords don't match."); return; }
     setPwSaving(true);
     try {
@@ -239,7 +239,7 @@ export default function EditProfilePage() {
                 </div>
                 <div>
                   <label className="block text-xs font-semibold mb-1.5" style={{ color: D.muted }}>New password</label>
-                  <input type="password" required autoComplete="new-password" placeholder="Min. 6 characters" className={inputCls} style={{ borderColor: D.border, color: D.text }}
+                  <input type="password" required autoComplete="new-password" placeholder="Min. 8 characters" className={inputCls} style={{ borderColor: D.border, color: D.text }}
                     value={pwForm.next} onChange={(e) => setPwForm((f) => ({ ...f, next: e.target.value }))} />
                 </div>
                 <div>

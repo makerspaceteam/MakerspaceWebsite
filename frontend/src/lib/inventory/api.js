@@ -2,7 +2,7 @@
 // real backend (/api/inventory/*) through the shared hub API client; the
 // mappers translate DB rows (snake_case, DB vocab) into the UI shapes the
 // components were built around, mirroring toFrontendUser in hub/AuthContext.
-import { api, BASE_URL, getToken } from '../api/client'
+import { api, BASE_URL, authFetch } from '../api/client'
 import { CATEGORIES } from './data'
 
 // ── Mappers: DB row → UI shape ───────────────────────────────────────────
@@ -274,9 +274,8 @@ export const deleteLabService = (id) => api.del(`/api/inventory/lab-services/${i
 export async function uploadItemImage(file) {
   const form = new FormData()
   form.append('image', file)
-  const res = await fetch(`${BASE_URL}/api/inventory/items/upload-image`, {
+  const res = await authFetch(`/api/inventory/items/upload-image`, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${getToken()}` },
     body: form,
   })
   const data = await res.json().catch(() => ({}))

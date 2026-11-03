@@ -1,4 +1,4 @@
-import { api, getToken, BASE_URL } from "./api/client";
+import { api, authFetch, BASE_URL } from "./api/client";
 
 // Self-service profile edit: name/phone/bio/avatar only (see
 // backend/src/modules/users/users.controller.js's updateMe).
@@ -21,9 +21,8 @@ export async function changeMyPassword({ current_password, new_password }) {
 export async function uploadMyAvatar(file) {
   const form = new FormData();
   form.append("avatar", file);
-  const res = await fetch(`${BASE_URL}/api/users/me/avatar`, {
+  const res = await authFetch(`/api/users/me/avatar`, {
     method: "POST",
-    headers: { Authorization: `Bearer ${getToken()}` },
     body: form,
   });
   const data = await res.json().catch(() => ({}));

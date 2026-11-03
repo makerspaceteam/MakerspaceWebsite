@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { UserPlus, User as UserIcon, IdCard } from "lucide-react";
 import { HubNav } from "./HubNav";
@@ -13,32 +13,46 @@ import { D, GRADIENT, ErrorBox, TextField, PasswordField } from "./authUi";
 export default function CompleteSignupPage() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { loginWithToken } = useAuth();
-  const params = new URLSearchParams(location.search);
-  const token = params.get("token");
-  const email = params.get("email") || "";
-
-  const [fullName, setFullName] = useState(params.get("name") || "");
+  const { sessionStarted } = useAuth();
+  // The URL only holds a one-time code; the signup token, email and name come
+  // back from the exchange and live in memory, never in the address bar.
+  const [token, setToken] = useState(null);
+  const [email, setEmail] = useState("");
+  const [fullName, setFullName] = useState("");
   const [studentId, setStudentId] = useState("");
   const [password, setPassword] = useState("");
   const [confirm, setConfirm]   = useState("");
   const [showPw, setShowPw]     = useState(false);
   const [error, setError]       = useState("");
   const [loading, setLoading]   = useState(false);
+  const exchanged = useRef(false);
+  const [checking, setChecking] = useState(true);
+
+  useEffect(() => {
+    if (exchanged.current) return;
+    exchanged.current = true;
+    const code = new URLSearchParams(location.search).get("code");
+    window.history.replaceState(null, "", location.pathname);
+    if (!code) { setChecking(false); setError("This signup link is invalid or has expired. Please sign in with Microsoft again."); return; }
+    api.post("/api/auth/exchange", { code, kind: "ms_signup" })
+      .then(({ token: t, email: e, name }) => { setToken(t); setEmail(e || ""); setFullName(name || ""); })
+      .catch((err) => setError(err.message || "This signup link is invalid or has expired."))
+      .finally(() => setChecking(false));
+  }, [location.search, location.pathname]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError("");
     if (!fullName.trim()) { setError("Please enter your name."); return; }
     if (!studentId.trim()) { setError("Please enter your Student ID."); return; }
-    if (password.length < 6) { setError("Password must be at least 6 characters."); return; }
+    if (password.length < 8) { setError("Password must be at least 8 characters."); return; }
     if (password !== confirm) { setError("Passwords don't match."); return; }
     setLoading(true);
     try {
-      const { token: sessionToken } = await api.post("/api/auth/microsoft/complete-signup", {
+      const { user: row } = await api.post("/api/auth/microsoft/complete-signup", {
         token, full_name: fullName.trim(), student_id: studentId.trim(), password,
       });
-      const user = await loginWithToken(sessionToken);
+      const user = sessionStarted(row);
       navigate(destinationFor(user.role), { replace: true });
     } catch (err) {
       setError(err.message || "Something went wrong. Please try again.");
@@ -60,7 +74,9 @@ export default function CompleteSignupPage() {
           <UserPlus size={18} color="white" strokeWidth={2.2} />
         </div>
 
-        {!token ? (
+        {checking ? (
+          <p className="text-sm" style={{ color: D.muted }}>Checking your link…</p>
+        ) : !token ? (
           <>
             <h1 className="text-2xl font-extrabold" style={{ color: D.text }}>This link is invalid</h1>
             <p className="text-sm leading-relaxed" style={{ color: D.muted }}>

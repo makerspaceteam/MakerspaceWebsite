@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { getToken } from "../../lib/api/client";
+import { useAuth } from "../../hub/AuthContext";
 import { learningApi } from "../../lib/api/learning";
 
 /**
@@ -10,16 +10,17 @@ import { learningApi } from "../../lib/api/learning";
  */
 export function useUnlockedPaths() {
   const [unlocked, setUnlocked] = useState([]);
+  const signedIn = Boolean(useAuth()?.user);
 
   useEffect(() => {
-    if (!getToken()) return;
+    if (!signedIn) return;
     learningApi
       .myLearning()
       .then(({ unlockedCourseIds }) => setUnlocked(unlockedCourseIds))
       .catch(() => {
         /* token invalid or backend down, keep the empty list */
       });
-  }, []);
+  }, [signedIn]);
 
   const isUnlocked = useCallback(
     (courseId) => unlocked.includes(Number(courseId)),
